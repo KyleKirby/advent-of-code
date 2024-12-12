@@ -1,0 +1,1 @@
+Execute 'cargo run' in the day subdirectories to run each day's solution
