@@ -1,8 +1,12 @@
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
+use std::collections::HashSet;
+//use std::{thread, time};
+use std::env;
 
-#[derive(Copy, Clone)]
+
+#[derive(Copy, Clone, Eq, Hash, PartialEq)]
 struct Coordinates {
     row: usize,
     col: usize,
@@ -10,9 +14,12 @@ struct Coordinates {
 
 type PuzzleMap = Vec<Vec<char>>;
 
+type PuzzleHashSet = HashSet<Coordinates>;
+
 fn main() {
+    env::set_var("RUST_BACKTRACE", "1");
+
     let mut map: PuzzleMap = vec![];
-    let mut obstructions_placed = 0; // count of number of obstructions that would put the guard in an infinite loop
 
     if let Ok(lines) = read_lines("input") {
         // Consumes the iterator, returns an (Optional) String
@@ -22,135 +29,132 @@ fn main() {
     }
 
     let mut guard_position = get_guard_position(&map);
+    let mut obstacle_set = PuzzleHashSet::new();
+    let mut guard_step_set = PuzzleHashSet::new();
+    let starting_position = guard_position.clone();
+
+    // try placing an obstacle at each position
+    for row in 0..map.len() {
+        for col in 0..map[0].len() {
+            let obstacle_position = Coordinates {row: row, col: col};
+            if map[row][col] == '#' ||  obstacle_position == starting_position {
+                // can't place an obstacle here
+                continue;
+            }
+
+            try_trapping_guard(&mut map.clone(), &mut guard_position.clone(), &mut obstacle_set, &obstacle_position);
+        }
+    }
 
     while guard_is_in_puzzle_map(&map, &guard_position) {
-        if try_trapping_guard(&mut map.clone(), &mut guard_position.clone()) {
-            obstructions_placed += 1;
-        }
+        guard_step_set.insert(guard_position);
         guard_step(&mut map, &mut guard_position, 'X');
     }
 
-    println!("count_guard_positions {}", count_guard_positions(&map));
-    println!("obstructions_placed {}", obstructions_placed);
+    println!("guard positions {}", guard_step_set.len());
+    println!("obstacles placed {}", obstacle_set.len());
     
 }
 
-fn try_trapping_guard(map: &mut PuzzleMap, guard_position: &mut Coordinates) -> bool {
-    // set an obstacle in the guard's path and turn them
-    match map[guard_position.row][guard_position.col] {
-        '^' => {
-            if guard_position.row == 0 || map[guard_position.row - 1][guard_position.col] == '#'
-            || guard_position.col + 1 == map[0].len() {
-                return false;
-            }
-            map[guard_position.row - 1][guard_position.col] = 'O';
-            map[guard_position.row][guard_position.col] = 'S';
-            guard_position.col += 1;
-            map[guard_position.row][guard_position.col] = '>';
-            
-        },
-        'v' => {
-            if guard_position.row + 1 == map.len() 
-            || map[guard_position.row + 1][guard_position.col] == '#'
-            || guard_position.col == 0 {
-                return false;
-            }
-            map[guard_position.row + 1][guard_position.col] = 'O';
-            map[guard_position.row][guard_position.col] = 'S';
-            guard_position.col -= 1;
-            map[guard_position.row][guard_position.col] = '<';
+fn print_map(map: &PuzzleMap, guard_position: &Coordinates) {
+    let mut start_row = guard_position.row;
+    let mut start_col = guard_position.col;
+    let mut end_row = guard_position.row;
+    let mut end_col = guard_position.col;
 
-        },
-        '>' => {
-            if guard_position.col + 1 == map[0].len() 
-            || map[guard_position.row][guard_position.col + 1] == '#'
-            || guard_position.row + 1 == map.len() {
-                return false;
-            }
-            map[guard_position.row][guard_position.col + 1] = 'O';
-            map[guard_position.row][guard_position.col] = 'S';
-            guard_position.row += 1;
-            map[guard_position.row][guard_position.col] = 'v';
+    let mut row_offset = 20;
+    let mut col_offset = 20;
 
-
-        },
-        '<' => {
-            if guard_position.col == 0 
-            || map[guard_position.row][guard_position.col - 1] == '#'
-            || guard_position.row == 0 {
-                return false;
-            }
-            map[guard_position.row][guard_position.col - 1] = 'O';
-            map[guard_position.row][guard_position.col] = 'S';
-            guard_position.row -= 1;
-            map[guard_position.row][guard_position.col] = '^';
-
-        },
-        _ => panic!(),
+    if start_row >= row_offset {
+        start_row -= row_offset;
+    } else {
+        row_offset += start_row;
+        start_row = 0;
     }
+
+    if start_col >= col_offset {
+        start_col -= col_offset;
+    } else {
+        col_offset += start_col;
+        start_col = 0;
+    }
+
+    if end_row + row_offset >= map.len() {
+        end_row = map.len();
+    } else {
+        end_row += row_offset;
+    }
+
+    if end_col + col_offset >= map[0].len() {
+        end_col = map[0].len();
+    } else {
+        end_col += col_offset;
+    }
+
+    // reset console
+    print!("\x1B[2J\x1B[1;1H");
+
+    for row in start_row..end_row {
+        for col in start_col..end_col {
+            print!("{} ", map[row][col]);
+        }
+        println!("");
+    }
+}
+
+fn try_trapping_guard(map: &mut PuzzleMap, guard_position: &mut Coordinates, obstacle_set: &mut PuzzleHashSet, obstacle_position: &Coordinates) -> bool {
+    // set an obstacle in the guard's path and see if they get in a loop
+
+    //println!("{},{} try trapping at", guard_position.row, guard_position.col);
+
+    let mut puzzle_set = PuzzleHashSet::new();
+
+    map[obstacle_position.row][obstacle_position.col] = 'O';
+
+    let mut count_down = 0;
+    let mut last_marker_count = 0;
+    let mut current_marker_count: usize;
     
     while guard_is_in_puzzle_map(&map, &guard_position) {
+
+        //print_map(&map, &guard_position);
+        //thread::sleep(time::Duration::from_millis(10));
+
+        /*
         if is_guard_at_start_of_loop(&map, &guard_position) {
             return true;
         }
-        guard_step(map, guard_position, 'Y');
-    }
-    return false;
-}
+        */
+        puzzle_set.insert(*guard_position);
 
-fn is_guard_at_start_of_loop(map: &PuzzleMap, guard_position: &Coordinates) -> bool {
-    match map[guard_position.row][guard_position.col] {
-        '^' => {
-            if guard_position.row == 0 {
-                return false;
-            } else if map[guard_position.row - 1][guard_position.col] == 'O'
-            || map[guard_position.row - 1][guard_position.col] == 'S' {
-                return true;
-            }
-        },
-        'v' => {
-            if guard_position.row + 1 == map.len() {
-                return false;
-            } else if map[guard_position.row + 1][guard_position.col] == 'O'
-            || map[guard_position.row + 1][guard_position.col] == 'S' {
-                return true;
-            }
+        guard_step(map, guard_position, '/');
 
-        },
-        '>' => {
-            if guard_position.col + 1 == map[0].len() {
-                return false;
-            } else if map[guard_position.row][guard_position.col + 1] == 'O'
-            || map[guard_position.row][guard_position.col + 1] == 'S' {
-                return true;
+        // count the number of markers at each step and see if it is increasing
+        current_marker_count = puzzle_set.len();
+        if current_marker_count == last_marker_count {
+            if count_down == 0 {
+                /*
+                * start counting down from the current count and give the guard that many steps to see if it is stuck in a loop
+                */
+                count_down = 4 + current_marker_count;
+            } else {
+                count_down -= 1;
+                
+                //println!("{} {} {}", current_marker_count, last_marker_count, count_down);
+                if count_down == 0 {
+                    // this is likely a loop
+                    obstacle_set.insert(*obstacle_position);
+                    //println!("=========================================================================");
+                    //print_map(&map, &guard_position);
+                    return true;
+                }
             }
-        },
-        '<' => {
-            if guard_position.col == 0 {
-                return false;
-            } else if map[guard_position.row][guard_position.col - 1] == 'O'
-            || map[guard_position.row][guard_position.col - 1] == 'S' {
-                return true;
-            }
-        },
-        _ => panic!(),
-    }
-
-    
-
-    return false;
-}
-
-fn count_guard_positions(map: &PuzzleMap) -> u32 {
-    let mut count: u32 = 0;
-    for row in map {
-        for col in row {
-            if *col == 'X' {
-                count += 1;
-            }
+        } else {
+            count_down = 0;
+            last_marker_count = current_marker_count;
         }
     }
-    return count;
+    return false;
 }
 
 fn guard_is_in_puzzle_map(map: &PuzzleMap, guard_position: &Coordinates) -> bool {
@@ -158,6 +162,8 @@ fn guard_is_in_puzzle_map(map: &PuzzleMap, guard_position: &Coordinates) -> bool
 }
 
 fn guard_step(map: &mut PuzzleMap, guard_position: &mut Coordinates, guard_position_marker: char) {
+
+    //println!("{},{}", guard_position.row, guard_position.col);
 
     let mut new_guard_position = Coordinates {row: guard_position.row, col: guard_position.col};
     
@@ -184,12 +190,15 @@ fn guard_step(map: &mut PuzzleMap, guard_position: &mut Coordinates, guard_posit
             }
             new_guard_position.col -= 1;
         },
-        _ => panic!(),
+        _ => {
+            print_map(&map, &guard_position);
+            panic!();
+        },
     }
 
     if guard_is_in_puzzle_map(&map, &new_guard_position) {
         // check for an obstacle
-        if map[new_guard_position.row][new_guard_position.col] == '#' {
+        if map[new_guard_position.row][new_guard_position.col] == '#' || map[new_guard_position.row][new_guard_position.col] == 'O' {
             // turn right
             match map[guard_position.row][guard_position.col] {
                 '^' => {
@@ -216,8 +225,8 @@ fn guard_step(map: &mut PuzzleMap, guard_position: &mut Coordinates, guard_posit
     } else {
         // moved out of the area
         map[guard_position.row][guard_position.col] = guard_position_marker;
-        guard_position.row = new_guard_position.row;
-        guard_position.col = new_guard_position.col;
+        guard_position.row = usize::MAX;
+        guard_position.col = usize::MAX;
     }
 }
 
