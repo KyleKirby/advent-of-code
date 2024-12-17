@@ -9,19 +9,11 @@ type Stone = u64;
 type StoneCount = u64;
 type Stones = HashMap<Stone, StoneCount>;
 
-fn add_stone(stones: &mut Stones, stone: &Stone, count: &StoneCount) {
+fn add_stone(stones: &mut Stones, stone: &Stone, count: StoneCount) {
     if stones.contains_key(&stone) {
         *stones.get_mut(&stone).unwrap() += count;
     } else {
-        stones.insert(*stone, *count);
-    }
-}
-
-fn remove_stone(stones: &mut Stones, stone: &Stone, count: &StoneCount) {
-    *stones.get_mut(&stone).unwrap() -= count;
-
-    if *stones.get(stone).unwrap() == 0 {
-        stones.remove(stone);
+        stones.insert(*stone, count);
     }
 }
 
@@ -40,7 +32,7 @@ fn init_stones(message: String) -> Stones {
 
     for stone in message_stones {
         if let Ok(n) = stone.parse::<Stone>() {
-            add_stone(&mut stones, &n, &1u64);
+            add_stone(&mut stones, &n, 1u64);
         }
     }
 
@@ -50,13 +42,17 @@ fn init_stones(message: String) -> Stones {
 
 fn blink(stones: &mut Stones) {
     let mut new_stones = Stones::new();
-    let mut del_stones = Stones::new();
 
     for (stone, count) in stones.iter_mut() {
+        if *count == 0 {
+            // skip entries with no stones
+            continue;
+        }
+
         if *stone == 0 {
             // replace 0 with 1
-            add_stone(&mut new_stones, &1, count);
-            add_stone(&mut del_stones, stone, count);
+            add_stone(&mut new_stones, &1, *count);
+            *count = 0;
         } else {
             let stone_string = stone.to_string();
             let stone_string_len = stone_string.len();
@@ -79,33 +75,30 @@ fn blink(stones: &mut Stones) {
                 }
                 
                 if let Ok(n) = s1.parse::<u64>() {
-                    add_stone(&mut new_stones, &n, count);
-                    add_stone(&mut del_stones, stone, count);
+                    add_stone(&mut new_stones, &n, *count);
                 } else {
                     // failed to parse?..
                     panic!();
                 }
 
                 if let Ok(n) = s2.parse::<u64>() {
-                    add_stone(&mut new_stones, &n, &count);
+                    add_stone(&mut new_stones, &n, *count);
                 } else {
                     // failed to parse?..
                     panic!();
                 }
+
+                *count = 0;
             } else {
                 // replace with the stone's number multiplied by 2024
-                add_stone(&mut new_stones, &(stone*2024), count);
-                add_stone(&mut del_stones, stone, count);
+                add_stone(&mut new_stones, &(stone*2024), *count);
+                *count = 0;
             }
         }
     }
 
     for (stone, count) in new_stones {
-        add_stone(stones, &stone, &count);
-    }
-
-    for (stone, count) in del_stones {
-        remove_stone(stones, &stone, &count);
+        add_stone(stones, &stone, count);
     }
 
 }
@@ -116,7 +109,7 @@ fn blink_until(stones: Stones, blinks_remaining: u8) -> u64 {
 
     for (stone, count) in stones {
         let mut thread_stones = Stones::new();
-        add_stone(&mut thread_stones, &stone, &count);
+        add_stone(&mut thread_stones, &stone, count);
         let handle = thread::spawn(move || -> u64 {
             for _i in 0..blinks_remaining {
                 blink(&mut thread_stones);
@@ -147,7 +140,7 @@ fn blink_until(stones: Stones, blinks_remaining: u8) -> u64 {
 fn main() {
     let message: String = get_string_from_file(env::args());
 
-    let mut stones: Stones = init_stones(message);
+    let stones: Stones = init_stones(message);
 
     const MAX_BLINKS: u8 = 75;
 
@@ -156,9 +149,11 @@ fn main() {
 
     let start = SystemTime::now();
 
-    println!("stone count: {}", blink_until(stones, MAX_BLINKS));
+    let total_stones = blink_until(stones, MAX_BLINKS);
 
     let end = SystemTime::now();
+
+    println!("stone count: {}", total_stones);
 
     let start_since_epoch = start
         .duration_since(UNIX_EPOCH)
@@ -168,7 +163,7 @@ fn main() {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
 
-    println!("total time in us: {}", end_since_epoch.as_micros() - start_since_epoch.as_micros());
+    println!("total time in ms: {}", end_since_epoch.as_millis() - start_since_epoch.as_millis());
 
 }
 
