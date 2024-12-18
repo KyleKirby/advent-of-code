@@ -91,7 +91,7 @@ impl ClawMachine {
     }
 }
 
-fn parse_u32(s: &str) -> i64 {
+fn parse_i64(s: &str) -> i64 {
     // skip past first two characters since input will be in the form of "X+" or "X="
     match s[2..].parse::<i64>() {
         Ok(n) => {
@@ -120,15 +120,15 @@ fn parse_claw_machine(claw_machine_lines: &Vec<String>) -> ClawMachine {
     const button_a_cost:i64 = 3;
     const button_b_cost:i64 = 1;
 
-    let button_a = Button { x: parse_u32(x_regex.find(button_a_line).unwrap().as_str()), y: parse_u32(y_regex.find(button_a_line).unwrap().as_str()), token_cost: button_a_cost, presses: 0 };
-    let button_b = Button { x: parse_u32(x_regex.find(button_b_line).unwrap().as_str()), y: parse_u32(y_regex.find(button_b_line).unwrap().as_str()), token_cost: button_b_cost, presses: 0 };
+    let button_a = Button { x: parse_i64(x_regex.find(button_a_line).unwrap().as_str()), y: parse_i64(y_regex.find(button_a_line).unwrap().as_str()), token_cost: button_a_cost, presses: 0 };
+    let button_b = Button { x: parse_i64(x_regex.find(button_b_line).unwrap().as_str()), y: parse_i64(y_regex.find(button_b_line).unwrap().as_str()), token_cost: button_b_cost, presses: 0 };
 
     let prize_x_regex = Regex::new(r"X=[0-9]+").unwrap();
     let prize_y_regex = Regex::new(r"Y=[0-9]+").unwrap();
 
     const adjusted_prize_position:i64 = 10000000000000; // for part 2
 
-    let prize = Prize { x: parse_u32(prize_x_regex.find(prize_line).unwrap().as_str()) + adjusted_prize_position, y: parse_u32(prize_y_regex.find(prize_line).unwrap().as_str()) + adjusted_prize_position };
+    let prize = Prize { x: parse_i64(prize_x_regex.find(prize_line).unwrap().as_str()) + adjusted_prize_position, y: parse_i64(prize_y_regex.find(prize_line).unwrap().as_str()) + adjusted_prize_position };
 
     ClawMachine {a: button_a, b: button_b, prize: prize, token_cost: 0, winnable: false}
 
