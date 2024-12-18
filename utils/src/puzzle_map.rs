@@ -8,8 +8,8 @@ use std::env::Args;
 
 #[derive(Copy, Clone, Eq, Hash, PartialEq)]
 pub struct Coordinates {
-    row: usize,
-    col: usize,
+    pub row: usize,
+    pub col: usize,
 }
 
 impl fmt::Display for Coordinates {
@@ -130,7 +130,7 @@ type PuzzleHashMap = HashMap<char, Vec<Coordinates>>;
 type PuzzleSet     = HashSet<Coordinates>;
 
 pub struct PuzzleMap {
-    area_map: PuzzleMapData,
+    pub area_map: PuzzleMapData,
     antenna_map: PuzzleHashMap,
     antinode_set: PuzzleSet,
     
@@ -340,6 +340,11 @@ impl PuzzleMap {
     #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.area_map.len()
+    }
+
+    #[allow(dead_code)]
+    pub fn width(&self) -> usize {
+        self.area_map[0].len()
     }
 
 }
